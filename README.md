@@ -2,9 +2,7 @@
 
 # 🧍 Pose-ReID
 
-**Tracking-assisted person re-identification across multiple camera feeds.**
-
-Shoulder-normalized body proportions · YOLO26x-Pose · OpenCV · SQLite
+**Pose-ReID is a tracking-assisted person re-identification system that matches people across multiple camera feeds using shoulder-normalized body proportions and shirt colour.**
 
 ![status](https://img.shields.io/badge/status-documentation--only-lightgrey?style=flat-square)
 ![language](https://img.shields.io/badge/language-Python-3776AB?style=flat-square&logo=python&logoColor=white)
