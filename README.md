@@ -1,12 +1,23 @@
+<div align="center">
+
 # Pose-ReID
 
-**Tracking-assisted person re-identification across multiple camera feeds, using YOLO26x-Pose, body-ratio analysis, OpenCV and database-assisted identity matching.**
+**Tracking-assisted person re-identification across multiple camera feeds.**
 
-> **Note:** This repository contains documentation only. The source code and implementation details are not published because the project was developed in a professional environment and is subject to confidentiality restrictions. Everything below describes the system's objectives, architecture and workflow at a level the project owner is permitted to disclose.
+Shoulder-normalized body proportions · YOLO26x-Pose · OpenCV · SQLite
 
----
+![status](https://img.shields.io/badge/status-documentation--only-lightgrey?style=flat-square)
+![language](https://img.shields.io/badge/language-Python-3776AB?style=flat-square&logo=python&logoColor=white)
+![model](https://img.shields.io/badge/model-YOLO26x--Pose-8A2BE2?style=flat-square)
+![vision](https://img.shields.io/badge/vision-OpenCV-5C3EE8?style=flat-square&logo=opencv&logoColor=white)
+![store](https://img.shields.io/badge/store-SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)
 
-## What it does
+</div>
+
+> [!IMPORTANT]
+> **Documentation only.** The source code and implementation details are not published — this project was developed in a professional environment and is subject to confidentiality restrictions. Everything below describes the objectives, architecture and workflow at a level the project owner is permitted to disclose.
+
+## Overview
 
 Pose-ReID detects people in video from multiple cameras, tracks them across frames, and re-identifies them when the tracker loses them — whether they leave one camera's view and appear in another, or step out and back into the same view. Either way, the tracker hands them a new tracking ID, and the system has to work out who they are again.
 
@@ -17,34 +28,22 @@ Instead of storing raw pixel measurements or image embeddings, the system repres
 The design cleanly separates two kinds of identity:
 
 | Identifier | Owner | Lifetime |
-|---|---|---|
+|:--|:--|:--|
 | **YOLO tracking ID** | The tracker | Temporary — changes when a person is lost and re-detected |
 | **Person ID** | The system database | Persistent — the person's identity across cameras and time |
 
 When a person reappears with a new tracking ID, the system matches the new detection against stored person records. On a match, the new tracking ID is associated with the existing Person ID and that association is saved, so subsequent frames need no further database search. With no match, a new Person ID is created.
 
----
+## How it works
 
-## Architecture
-
-```
-Camera feeds (multiple)
-     │
-     ▼
-YOLO26x-Pose ──► person detections + body keypoints
-     │
-     ▼
-YOLO Tracking ──► temporary tracking IDs
-     │
-     ▼
-OpenCV ──► body measurements ──► shoulder-normalized body ratios
-     │
-     ▼
-Database ──► body-ratio records, person records,
-             tracking-ID → person-ID associations
-     │
-     ▼
-OpenCV ──► custom bounding boxes + person-identity tags
+```mermaid
+flowchart LR
+    A["Camera feeds"] --> B["YOLO26x-Pose<br/>detection + keypoints"]
+    B --> C["YOLO tracking<br/>temporary IDs"]
+    C --> D["OpenCV<br/>body measurements"]
+    D --> E["Shoulder-normalized<br/>body ratios"]
+    E --> F[("Database<br/>records + associations")]
+    F --> G["OpenCV<br/>boxes + person tags"]
 ```
 
 ### Body-ratio representation
@@ -61,42 +60,32 @@ Working with ratios rather than raw pixel distances reduces the effect of a pers
 
 Each person holds up to **30 body-ratio records**, so different observed body configurations are represented instead of a single average.
 
-Update logic:
-
 1. Compute the current normalized body ratios from keypoints.
 2. Compare them with the person's existing records.
 3. While the person has fewer than 30 records: if the new data differs by more than **10%** from *every* existing record, store it as a new record. The difference is evaluated across the body-ratio record as a whole, not ratio by ratio.
 4. At 30 records the set is full and stops growing.
 
+> [!NOTE]
 > The stored records are body ratios calculated from keypoints — not raw poses or raw keypoint coordinates.
 
-### Re-identification flow
+### Re-identification
 
-**While tracked:** the tracking-ID → person-ID association is reused directly; no per-frame database comparison.
+**While tracked** — the tracking-ID → person-ID association is reused directly. No per-frame database comparison.
 
-**When a tracking ID appears that has no saved association:**
+**When an unknown tracking ID appears** — the new detection is matched against stored person records:
 
-```
-New / unknown tracking ID
-        │
-        ▼
-Compare new body ratios + shirt colour
-against every stored person record
-        │
-   ┌────┴─────┐
- match       no match
-   │            │
-   ▼            ▼
-associate    create a new Person ID
-tracking     and store this person's
-ID → person  body ratios under it
-   │
-   ▼
-save the association; reuse it
-for later frames with this ID
+```mermaid
+flowchart TD
+    A["Unknown tracking ID"] --> B["Compare body ratios + shirt colour<br/>against stored person records"]
+    B --> C{"Match found?"}
+    C -->|Yes| D["Associate tracking ID<br/>with existing Person ID"]
+    C -->|No| E["Create new Person ID<br/>and store ratios under it"]
+    D --> F["Save association"]
+    E --> F
+    F --> G["Reuse association on later<br/>frames with this tracking ID"]
 ```
 
-Worked example:
+Worked example *(illustrative IDs, not project records)*:
 
 ```
 Before loss:   Tracking ID 1  →  Person A
@@ -107,8 +96,6 @@ Result:        Tracking ID 8  →  Person A   (association saved)
 After that:    Tracking ID 8 identified from the saved association
 ```
 
-*(Illustrative IDs, not project records.)*
-
 ### Why shirt colour
 
 Body proportions alone can mismatch different people with similar builds, or when keypoints are unreliable at distance — a common situation across camera views. Shirt colour is therefore checked on **every** re-identification, not only as a fallback, and helps disambiguate otherwise close body-ratio matches.
@@ -117,21 +104,17 @@ Body proportions alone can mismatch different people with similar builds, or whe
 
 Raw YOLO detection boxes are used internally only. OpenCV draws the system's own bounding boxes and tags, and the tag shows the **system Person ID**, not the raw tracking ID — so a person keeps the same label as their tracking ID changes.
 
----
-
 ## Tech stack
 
 | Technology | Role |
-|---|---|
+|:--|:--|
 | **Python** | Main implementation language |
 | **YOLO26x-Pose** | Person detection and body-keypoint prediction. The `x` variant was chosen for the most accurate keypoints available, since measurement quality depends entirely on them. |
 | **YOLO tracking** | Frame-to-frame tracking and tracking IDs |
 | **OpenCV** | Keypoint processing, measurement calculation, custom visualization |
 | **SQLite** | Person records, body-ratio records and tracking-ID ↔ person-ID associations. Chosen as the pre-production store — simple, file-based, no server to run. |
 
----
-
-## Engineering concepts demonstrated
+## Concepts demonstrated
 
 - Human pose estimation and keypoint processing
 - Skeletal body-measurement calculation
@@ -145,26 +128,20 @@ Raw YOLO detection boxes are used internally only. OpenCV draws the system's own
 - Database-assisted identity management
 - Custom computer-vision visualization
 
----
+## Limitations
 
-## Scope and limitations
-
-- Body ratios are pose- and viewpoint-sensitive; occlusion, distance and low-resolution keypoints degrade accuracy. A person seen from a very different angle in a second camera is the hardest case — and is not yet validated, since pre-production runs a single camera.
-- Every frame is processed; the system does not skip frames.
-- SQLite was the pre-production choice. It was not designed around concurrent writes from many cameras or long-term record growth.
-- Tracking IDs are assigned by the tracker and can repeat across tracker restarts. Persisted associations assume they stay unambiguous — scoping them per session or per camera is the safe approach.
-- No published benchmark results, dataset or evaluation metrics accompany this project.
-- Matching is not biometric identification — it is a tracking aid for continuity across the observed camera feeds.
-
----
+- **Viewpoint sensitivity.** Body ratios are pose- and viewpoint-sensitive; occlusion, distance and low-resolution keypoints degrade accuracy. A person seen from a very different angle in a second camera is the hardest case — and is not yet validated, since pre-production runs a single camera.
+- **No frame skipping.** Every frame is processed.
+- **Pre-production store.** SQLite was not chosen for concurrent writes from many cameras or long-term record growth.
+- **Tracking ID reuse.** Tracking IDs are assigned by the tracker and can repeat across tracker restarts. Persisted associations assume they stay unambiguous — scoping them per session or per camera is the safe approach.
+- **No published metrics.** No benchmark results, dataset or evaluation figures accompany this project.
+- **Not biometric ID.** Matching is a tracking aid for continuity across the observed camera feeds, not a biometric identification system.
 
 ## Status
 
 Documentation-only repository. Implementation, datasets, internal screenshots and configuration are withheld for confidentiality reasons.
 
 Pre-production runs a single camera. Multi-camera re-identification is the production target and has not yet been validated at that scale.
-
----
 
 ## License
 
