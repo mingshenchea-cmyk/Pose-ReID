@@ -54,7 +54,7 @@ Database ──► body-ratio records, person records,
 OpenCV ──► custom bounding boxes + person-identity tags
 ```
 
-### 📐 Body-ratio representation
+### Body-ratio representation
 
 Shoulder width is the reference measurement and is assigned a ratio of `1.0`. Other selected measurements are expressed relative to it:
 
